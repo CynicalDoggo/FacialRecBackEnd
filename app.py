@@ -10,7 +10,7 @@ key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impi
 supabase = create_client(url, key)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:4173"}})
+CORS(app, resources={r"/*": {"origins": "https://facialrecog-2b424.web.app"}})
 
 #Hash Function
 def hash_password(password: str) -> str:
