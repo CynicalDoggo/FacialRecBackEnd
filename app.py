@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from supabase import create_client, Client
 from flask_cors import CORS
 import hashlib
+import os
 
 # Supabase connection setup
 url = "https://jbqkrihvwaurorcdagiw.supabase.co"
@@ -11,6 +12,7 @@ supabase = create_client(url, key)
 app = Flask(__name__)
 CORS(app)
 
+app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
 #Hash Function
