@@ -10,9 +10,6 @@ key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impi
 supabase = create_client(url, key)
 
 app = Flask(__name__)
-CORS(app)
-
-app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)))
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
 #Hash Function
