@@ -10,7 +10,18 @@ key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impi
 supabase = create_client(url, key)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://facialrecog-2b424.web.app"}})
+
+# Preflight request handling (put this before your route definitions)
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = app.response_class()
+        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response
+
+CORS(app, resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app", "http://localhost:5173"]}})
 
 #Hash Function
 def hash_password(password: str) -> str:
