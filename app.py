@@ -12,16 +12,13 @@ supabase = create_client(url, key)
 app = Flask(__name__)
 
 # Preflight request handling (put this before your route definitions)
-@app.before_request
-def handle_preflight():
-    if request.method == 'OPTIONS':
-        response = app.response_class()
-        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        return response
-
-CORS(app, resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app", "http://localhost:5173"]}})
+CORS(
+    app,
+    resources={r"/*": {"origins": [os.getenv("https://facialrecog-2b424.web.app", "http://localhost:5173")]}},  # Use environment variable or default
+    supports_credentials=True,  # Allow cookies/credentials
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  # Allowed HTTP methods
+    allow_headers=['Content-Type', 'Authorization']  # Allowed headers
+)
 
 #Hash Function
 def hash_password(password: str) -> str:
