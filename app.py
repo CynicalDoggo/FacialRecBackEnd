@@ -11,11 +11,12 @@ supabase = create_client(url, key)
 
 app = Flask(__name__)
 
-# Preflight request handling (put this before your route definitions)
 CORS(
     app,
-    resources={r"/*": {"origins": [os.getenv("https://facialrecog-2b424.web.app", "http://localhost:5173")]}},  # Use environment variable or default
-    supports_credentials=True,  # Allow cookies/credentials
+    resources={r"/*": {"origins": [
+        os.getenv("https://facialrecog-2b424.web.app", "http://localhost:5173")  # Environment variable or default URL
+    ]}},
+    supports_credentials=True,  # Allow credentials (cookies)
     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  # Allowed HTTP methods
     allow_headers=['Content-Type', 'Authorization']  # Allowed headers
 )
