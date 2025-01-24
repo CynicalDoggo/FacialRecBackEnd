@@ -10,14 +10,7 @@ key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impi
 supabase = create_client(url, key)
 
 app = Flask(__name__)
-
-CORS(
-    app,
-    resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app/", "http://localhost:5173"]}},
-    supports_credentials=True,
-    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allow_headers=['Content-Type'] 
-)
+CORS(app)
 
 #Hash Function
 def hash_password(password: str) -> str:
@@ -283,4 +276,4 @@ def book_room():
         return jsonify({"success": False, "message": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True)
