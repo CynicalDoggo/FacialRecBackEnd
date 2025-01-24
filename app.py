@@ -13,12 +13,10 @@ app = Flask(__name__)
 
 CORS(
     app,
-    resources={r"/*": {"origins": [
-        os.getenv("https://facialrecog-2b424.web.app", "http://localhost:5173")  # Environment variable or default URL
-    ]}},
-    supports_credentials=True,  # Allow credentials (cookies)
-    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  # Allowed HTTP methods
-    allow_headers=['Content-Type', 'Authorization']  # Allowed headers
+    resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app/", "http://localhost:5173"]}},
+    supports_credentials=True,
+    methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Content-Type'] 
 )
 
 #Hash Function
