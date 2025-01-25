@@ -10,7 +10,7 @@ key = os.getenv("SUPABASE_KEY")
 supabase = create_client(url, key)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://your-firebase-app.web.app"}})
+CORS(app, resources={r"/*": {"origins": "https://facialrecog-2b424.web.app"}})
 
 #Hash Function
 def hash_password(password: str) -> str:
