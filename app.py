@@ -1,21 +1,32 @@
 from flask import Flask, request, jsonify
 from supabase import create_client, Client
 from flask_cors import CORS
+from functools import wraps 
 import hashlib
+import jwt
 import os
+import secrets
+import datetime
 
 # Supabase connection setup
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
 supabase = create_client(url, key)
 
+#secret key generator
+secret_key = secrets.token_hex(32)
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "https://facialrecog-2b424.web.app"}})
+app.secret_key = secret_key
 
 #Hash Function
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
+""""
+GUEST FUNCTIONS
+"""
 #Registration Function
 @app.route("/register", methods=["POST"])
 def register():
@@ -199,7 +210,7 @@ def save_preferences():
 
 #Booking Room
 @app.route("/book_room", methods=["POST"])
-def book_room():
+def book_room():  
     try:
         # parse input data
         data = request.json
@@ -274,6 +285,57 @@ def book_room():
     except Exception as e:
         print("Error in book_room:", str(e))
         return jsonify({"success": False, "message": "Internal server error"}), 500
+
+""""
+EMPLOYEE FUNCTION
+"""
+@app.route('/login', methods=['post'])
+def login():
+    data = request.json
+    emp_id =  data.get('Employee_ID')
+    hashed_password = hash_password(data.get('password'))
+
+    if not emp_id or not hashed_password:
+        return jsonify({"error": "Employee ID and password are required"}), 400
+
+    try:
+        response = supabase.table('Employee').select('*').eq('emp_id', emp_id).single()
+        
+        if response.error:
+            return jsonify({"error": "User not found"}), 404
+        
+        user = response.data
+
+        if user['password_hash'] != hashed_password:
+            return jsonify({"error": "Invalid password"}), 401
+        
+        token = jwt.encode(
+            {
+            "emp_id": user["emp_id"],
+            "role": user["role"],
+            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+            },
+            app.secret_key,
+            algorithm="HS256"
+        )   
+        
+        return jsonify({"message": "Login successful!", "user": user, "token": token})
+    except Exception as e:
+        print(f"An error occured: {str(e)}")
+        return jsonify({"error": "something went wrong"}), 500
+    
+""""
+STAFF FUNCTIONS
+"""
+@app.route("/blacklisting", methods=["POST"])
+def blacklisting():
+    pass
+
+""""
+ADMIN FUNCTION
+"""
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
