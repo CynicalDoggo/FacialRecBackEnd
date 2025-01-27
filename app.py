@@ -289,7 +289,7 @@ def book_room():
 """"
 EMPLOYEE FUNCTION
 """
-@app.route('/login', methods=['post'])
+@app.route('/login', methods=['POST'])
 def login():
     data = request.json
     emp_id =  data.get('Employee_ID')
@@ -327,14 +327,10 @@ def login():
 """"
 STAFF FUNCTIONS
 """
-@app.route("/blacklisting", methods=["POST"])
-def blacklisting():
-    pass
 
 """"
 ADMIN FUNCTION
 """
-
 
 
 if __name__ == "__main__":
