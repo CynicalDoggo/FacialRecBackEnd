@@ -299,12 +299,12 @@ def login():
         return jsonify({"error": "Employee ID and password are required"}), 400
 
     try:
-        response = supabase.table('Employee').select('*').eq('emp_id', emp_id).single()
+        response = supabase.table('Employee').select('*').eq('emp_id', emp_id).single().execute()
         
-        if response.error:
+        if not response.data:
             return jsonify({"error": "User not found"}), 404
         
-        user = response.data
+        user = response.data[0]
 
         if user['password_hash'] != hashed_password:
             return jsonify({"error": "Invalid password"}), 401
