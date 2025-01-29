@@ -1,12 +1,12 @@
 from flask import Flask, request, jsonify
 from supabase import create_client, Client
 from flask_cors import CORS
-from functools import wraps 
+from dotenv import load_dotenv
 import hashlib
-import jwt
 import os
 import secrets
-import datetime
+
+load_dotenv(dotenv_path="C:/Users/Bryant Tan/OneDrive/Desktop/ZeroRecBackEnd/BackEndFlaskApp/FacialRecBackEnd/.env")
 
 # Supabase connection setup
 url = os.getenv("SUPABASE_URL")
@@ -17,7 +17,8 @@ supabase = create_client(url, key)
 secret_key = secrets.token_hex(32)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://facialrecog-2b424.web.app"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173/"}})
+CORS(app)
 app.secret_key = secret_key
 
 #Hash Function
@@ -45,46 +46,69 @@ def register():
         password_hash = hash_password(data.get("password"))
         facialID_consent = False
         
-        #creating user in supabase authentication 
-        auth_response = supabase.auth.sign_up({
+        # Check if email already exists in the guest table
+        existing_guest = supabase.table('guest').select('*').eq('email', email).execute()
+        if existing_guest.data:
+            return jsonify({'success': False, 'message': 'Email already registered.'}), 400
+
+        # Create user in Supabase Authentication
+        try:
+            auth_response = supabase.auth.sign_up({
                 "email": email,
                 "password": data.get("password"),
-                "options": {"data": 
-                    {
-                        "first_name": first_name, 
-                        "last_name": last_name, 
-                        "mobile_number": mobile_number
-                    }
-                }     
-            }  
-        )
-        
-        user_id = auth_response.user.id
-        
-        # No facial opt in
-        if data.get("facialRecognitionOptIn") == False:
-            #Inserting into guest table
-            guest_response = supabase.table("guest").insert(
-                {   
-                    "user_id": user_id,
+                "options": {"data": {
                     "first_name": first_name,
                     "last_name": last_name,
-                    "email": email,
-                    "mobile_number": mobile_number,
-                    "password_hash": password_hash,
-                    "facialid_consent": facialID_consent
-                }
-            ).execute()
-            # Check response after insertion
-            if guest_response.data:
-                return jsonify({"success": True, "message": "Registration successful!"}), 200
-            else:
-                return jsonify({"success": False, "message": "Error inserting into guest table."}), 400
+                    "mobile_number": mobile_number
+                }}
+            })
+            user_id = auth_response.user.id
+        except Exception as e:
+            print("Error during authentication signup:", e)
+            return jsonify({"success": False, "message": "Error creating user in authentication."}), 400
         
-        # Facial opt in  
-        elif data.get("optInFacialRecognition") == True:
-            # Facial data insertion + Account registration
-            return jsonify({"success": True, "message": "Facial recognition opted-in"}), 200
+        # No facial opt in
+        try:
+            if data.get("facialRecognitionOptIn") == False:
+                #Inserting into guest table
+                guest_response = supabase.table("guest").insert(
+                    {   
+                        "user_id": user_id,
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "email": email,
+                        "mobile_number": mobile_number,
+                        "password_hash": password_hash,
+                        "facialid_consent": facialID_consent
+                    }
+                ).execute()
+
+                #DEBUGGING DELETE LATER
+                print("Guest table response:", guest_response)
+
+                profile_response = supabase.table("profiles").insert({
+                    "id": user_id,
+                    "role": "guest"
+                }).execute()
+
+                print("Profile Table respones:", profile_response)
+
+                # Check response after insertion
+                if guest_response.data and profile_response.data:
+                    return jsonify({"success": True, "message": "Registration successful!"}), 200
+                else:
+                    supabase.table("guest").delete().eq("user_id", user_id).execute()
+                    supabase.table("profiles").delete().eq("id", user_id).execute()
+                    return jsonify({"success": False, "message": "Error inserting into tables."}), 400
+            
+            # Facial opt in  
+            elif data.get("optInFacialRecognition") == True:
+                # Facial data insertion + Account registration
+                return jsonify({"success": True, "message": "Facial recognition opted-in"}), 200
+        except Exception as e:
+                supabase.table("guest").delete().eq("user_id", user_id).execute()
+                supabase.table("profiles").delete().eq("id", user_id).execute()
+                return jsonify({"success": False, "message": "Error inserting into tables."}), 400
         
         #something went wrong
         else: 
@@ -289,40 +313,7 @@ def book_room():
 """"
 EMPLOYEE FUNCTION
 """
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.json
-    emp_id =  data.get('Employee_ID')
-    hashed_password = hash_password(data.get('password'))
 
-    if not emp_id or not hashed_password:
-        return jsonify({"error": "Employee ID and password are required"}), 400
-
-    try:
-        response = supabase.table('Employee').select('*').eq('emp_id', emp_id).single().execute()
-        
-        if not response.data:
-            return jsonify({"error": "User not found"}), 404
-        
-        user = response.data[0]
-
-        if user['password_hash'] != hashed_password:
-            return jsonify({"error": "Invalid password"}), 401
-        
-        token = jwt.encode(
-            {
-            "emp_id": user["emp_id"],
-            "role": user["role"],
-            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
-            },
-            app.secret_key,
-            algorithm="HS256"
-        )   
-        
-        return jsonify({"message": "Login successful!", "user": user, "token": token})
-    except Exception as e:
-        print(f"An error occured: {str(e)}")
-        return jsonify({"error": "something went wrong"}), 500
     
 """"
 STAFF FUNCTIONS
