@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import hashlib
 import os
 import secrets
+import json
 
 load_dotenv(dotenv_path="C:/Users/Bryant Tan/OneDrive/Desktop/ZeroRecBackEnd/BackEndFlaskApp/FacialRecBackEnd/.env")
 
@@ -136,7 +137,7 @@ def get_user_data():
         return jsonify({"success": False, "message": str(e)}), 500
 
 #Change Password Function
-@app.route("/change_password", methods=["post"])
+@app.route("/change_password", methods=["POST"])
 def change_password():
     try:
         #Get data from request
@@ -309,15 +310,84 @@ def book_room():
     except Exception as e:
         print("Error in book_room:", str(e))
         return jsonify({"success": False, "message": "Internal server error"}), 500
-
-""""
-EMPLOYEE FUNCTION
-"""
-
     
 """"
 STAFF FUNCTIONS
 """
+#Adding blacklisted guest to table
+@app.route("/blacklist", methods=["POST"])
+def blacklist():
+    try:
+        auth_header = request.headers.get("Authorization")  # Get token from headers
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {"message": "Missing or invalid token"}, 401
+
+        token = auth_header.split("Bearer ")[1]
+        
+        response_dict = json.loads(token)
+
+        access_token = response_dict.get('session', {}).get('access_token', None)
+
+        user_repsonse = supabase.auth.get_user(access_token)
+
+        staff_id = user_repsonse.user.id
+
+        data = request.json
+        email = data.get("email")
+        reason = data.get("reason")
+
+        if not email or not reason:
+            return jsonify({"sucess": False, "message": "Email and reason are required."}), 400
+        
+        guest_response = supabase.table("guest").select("*").eq("email", email).execute()
+        if not guest_response.data:
+            return jsonify({"sucess": False, "message": "Guest not found."}), 400
+        
+        blacklist_response = supabase.table("blacklist").insert({
+            "email": email,
+            "reason": reason,
+            "added_by": staff_id
+        }).execute()
+
+        if blacklist_response.data:
+            return jsonify({"sucess": True, "message": "Guest successfully blacklisted."}), 200
+        else:
+            return jsonify({"success": False, "message": "Error adding guest to blacklist."}), 4
+        
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/get_blacklisted_guests', methods=['GET'])
+def get_blacklisted_guests():
+    try:
+        # Fetch blacklisted guests from the database
+        response = supabase.table("blacklist").select("*").execute()
+        
+        # Log the full Supabase response for debugging
+        print("Supabase Response:", response)
+        
+        # Check if the response has a 'data' field and is not empty
+        if hasattr(response, 'data') and response.data:
+            return jsonify({
+                'blacklistedGuests': [
+                    {'guestEmail': guest['email'], 'reason': guest['reason']}
+                    for guest in response.data
+                ]
+            }), 200
+        else:
+            # Check if the response contains an error
+            if hasattr(response, 'error') and response.error:
+                print("Supabase Error:", response.error)
+                return jsonify({"error": response.error.message}), 500
+            else:
+                return jsonify({"message": "Currently no blacklisted guests found"}), 404
+    except Exception as e:
+        # Return error details to help debugging
+        print("Exception:", e)
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+
+
 
 """"
 ADMIN FUNCTION
