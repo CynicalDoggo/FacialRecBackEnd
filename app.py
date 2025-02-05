@@ -36,16 +36,16 @@ def register():
         # Get the data from the frontend
         data = request.get_json()
         
-        # Debugging purposes (Delete later)
-        print("Received data:", data)
-        
-        #Filling in variables
-        first_name = data.get("firstName")
-        last_name = data.get("lastName")
-        mobile_number = data.get("phoneNum")
-        email = data.get("email")
-        password_hash = hash_password(data.get("password"))
-        facialID_consent = False
+        try:
+            #Filling in variables
+            first_name = data.get("firstName")
+            last_name = data.get("lastName")
+            mobile_number = data.get("phoneNum")
+            email = data.get("email")
+            password_hash = hash_password(data.get("password"))
+            facialID_consent = False
+        except Exception as e:
+            print("Error occured: ", e)
         
         # Check if email already exists in the guest table
         existing_guest = supabase.table('guest').select('*').eq('email', email).execute()
@@ -64,56 +64,49 @@ def register():
                 }}
             })
             user_id = auth_response.user.id
+
+            print("Successfully signed up")
         except Exception as e:
             print("Error during authentication signup:", e)
             return jsonify({"success": False, "message": "Error creating user in authentication."}), 400
         
         # No facial opt in
         try:
-            if data.get("facialRecognitionOptIn") == False:
-                #Inserting into guest table
-                guest_response = supabase.table("guest").insert(
-                    {   
-                        "user_id": user_id,
-                        "first_name": first_name,
-                        "last_name": last_name,
-                        "email": email,
-                        "mobile_number": mobile_number,
-                        "password_hash": password_hash,
-                        "facialid_consent": facialID_consent
-                    }
-                ).execute()
+            #Inserting into guest table
+            guest_response = supabase.table("guest").insert(
+                {   
+                    "user_id": user_id,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": email,
+                    "mobile_number": mobile_number,
+                    "password_hash": password_hash,
+                    "facialid_consent": facialID_consent
+                }
+            ).execute()
 
-                #DEBUGGING DELETE LATER
-                print("Guest table response:", guest_response)
-
+            try:
                 profile_response = supabase.table("profiles").insert({
                     "id": user_id,
                     "role": "guest"
                 }).execute()
+            except Exception as e:
+                print(e)
 
-                print("Profile Table respones:", profile_response)
+            print("Profile Table respones:", profile_response)
 
-                # Check response after insertion
-                if guest_response.data and profile_response.data:
-                    return jsonify({"success": True, "message": "Registration successful!"}), 200
-                else:
-                    supabase.table("guest").delete().eq("user_id", user_id).execute()
-                    supabase.table("profiles").delete().eq("id", user_id).execute()
-                    return jsonify({"success": False, "message": "Error inserting into tables."}), 400
-            
-            # Facial opt in  
-            elif data.get("optInFacialRecognition") == True:
-                # Facial data insertion + Account registration
-                return jsonify({"success": True, "message": "Facial recognition opted-in"}), 200
+            # Check response after insertion
+            if guest_response.data and profile_response.data:
+                return jsonify({"success": True, "message": "Registration successful!"}), 200
+            else:
+                supabase.table("guest").delete().eq("user_id", user_id).execute()
+                supabase.table("profiles").delete().eq("id", user_id).execute()
+                return jsonify({"success": False, "message": "Error inserting into tables."}), 400
+   
         except Exception as e:
                 supabase.table("guest").delete().eq("user_id", user_id).execute()
                 supabase.table("profiles").delete().eq("id", user_id).execute()
                 return jsonify({"success": False, "message": "Error inserting into tables."}), 400
-        
-        #something went wrong
-        else: 
-            return jsonify({"success": False, "message": "Something Went wrong"}), 400
         
     except Exception as e:
         print("Error:", e)
@@ -386,8 +379,9 @@ def get_blacklisted_guests():
         print("Exception:", e)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-
-
+@app.route('/get_guest_bookings', methods = ['GET'])
+def get_guest_bookings():
+    pass
 
 """"
 ADMIN FUNCTION
