@@ -18,7 +18,8 @@ supabase = create_client(url, key)
 secret_key = secrets.token_hex(32)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173/"}})
+# Allow multiple origins
+CORS(app, resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app", "http://localhost:5173"]}}, supports_credentials=True)
 CORS(app)
 app.secret_key = secret_key
 
