@@ -382,11 +382,26 @@ def get_blacklisted_guests():
 
 @app.route('/get_guest_bookings', methods = ['GET'])
 def get_guest_bookings():
-    pass
+    try:
+        response = supabase.table('room_boking').select('*, guest( first_name, last_name )').execute
+        bookings = response.data
+
+        pending = []
+        checked_in = []
+
+        for booking in bookings:
+            guest_data = booking.get('guests', {})
+            first_name = guest_data
+
+
+    except Exception as e:
+        print(f"Error retrieving guest bookings: {str(e)}")
+        return jsonify({'suess': False, 'message': 'failed to retrieve room bookings'})
 
 """"
 ADMIN FUNCTION
 """
+
 
 
 if __name__ == "__main__":
