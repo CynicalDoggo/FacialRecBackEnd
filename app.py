@@ -387,13 +387,9 @@ def get_blacklisted_guests():
 @app.route('/get_guest_bookings', methods = ['GET'])
 def get_guest_bookings():
     try:
-        today = datetime.now().date()
-        
         response = supabase.table('room_booking') \
-                    .select('*, guest( first_name, last_name )') \
-                    .gte('check_in_date', today.isoformat()) \
-                    .execute()
-                    
+                    .select('*, guest( first_name, last_name )').execute()
+
         bookings = response.data
 
         pending = []
@@ -421,25 +417,6 @@ def get_guest_bookings():
     except Exception as e:
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'suess': False, 'message': 'failed to retrieve room bookings'})
-
-#Handle check in of guess
-@app.route('/checkin/<reservation_id>', methods=['POST'])
-def handle_checkin(reservation_id):
-    try:
-        # Update check-in status
-        update_response = supabase.table('room_booking') \
-            .update({'checkIn_Status': True}) \
-            .eq('reservation_id', reservation_id) \
-            .execute()
-
-        if not update_response.data:
-            return jsonify({'success': False, 'message': 'Reservation not found'}), 404
-
-        return jsonify({'success': True, 'message': 'Check-in successful'}), 200
-
-    except Exception as e:
-        print(f"Check-in error: {str(e)}")
-        return jsonify({'success': False, 'message': 'Check-in failed'}), 500
     
 """"
 ADMIN FUNCTION
