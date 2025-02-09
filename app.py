@@ -478,12 +478,12 @@ def get_guest_bookings():
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'suess': False, 'message': 'failed to retrieve room bookings'})
 
-#check guest out 
-@app.route('/check_out', methods=['POST'])
+# checks guess out
+@app.route('/check_out/<int:booking_id>', methods=['DELETE'])  # Changed to DELETE method
 def check_out(booking_id):
     try:
         booking_response = supabase.table('room_booking') \
-            .select('*') \
+            .select('room_id') \
             .eq('reservation_id', booking_id) \
             .execute()
         
@@ -501,12 +501,12 @@ def check_out(booking_id):
                 .eq('room_id', booking_response.data[0]['room_id']) \
                 .execute()
             
-            return jsonify({'success': True, 'message': 'Booking canceled'}), 200
-        
-        return jsonify({'success': False, 'message': 'Failed to cancel booking'}), 400
+            return jsonify({'success': True, 'message': 'Check-out successful'}), 200
+            
+        return jsonify({'success': False, 'message': 'Check-out failed'}), 400
 
     except Exception as e:
-        print(f"Error canceling booking: {str(e)}")
+        print(f"Check-out error: {str(e)}")
         return jsonify({'success': False, 'message': 'Server error'}), 500
     
 """"
