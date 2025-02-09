@@ -480,8 +480,34 @@ def get_guest_bookings():
 
 #check guest out 
 @app.route('/check_out', methods=['POST'])
-def check_out(reservation_id):
-    pass
+def check_out(booking_id):
+    try:
+        booking_response = supabase.table('room_booking') \
+            .select('*') \
+            .eq('reservation_id', booking_id) \
+            .execute()
+        
+        if not booking_response.data:
+            return jsonify({'success': False, 'message': 'Booking not found'}), 404
+
+        delete_response = supabase.table('room_booking') \
+            .delete() \
+            .eq('reservation_id', booking_id) \
+            .execute()
+
+        if delete_response.data:
+            supabase.table('room') \
+                .update({'status': 'Available'}) \
+                .eq('room_id', booking_response.data[0]['room_id']) \
+                .execute()
+            
+            return jsonify({'success': True, 'message': 'Booking canceled'}), 200
+        
+        return jsonify({'success': False, 'message': 'Failed to cancel booking'}), 400
+
+    except Exception as e:
+        print(f"Error canceling booking: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error'}), 500
     
 """"
 ADMIN FUNCTION
