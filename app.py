@@ -305,7 +305,67 @@ def book_room():
     except Exception as e:
         print("Error in book_room:", str(e))
         return jsonify({"success": False, "message": "Internal server error"}), 500
-    
+
+#Get booking list for display
+@app.route('/get_guest_bookingsGUEST', methods=['GET'])
+def get_guest_bookingsGUEST():
+    try:
+        response = supabase.table('room_booking') \
+            .select('*, guest(first_name, last_name), room(room_type)') \
+            .execute()
+
+        bookings = response.data
+
+        formatted_bookings = []
+        for booking in bookings:
+            formatted = {
+                'id': booking['reservation_id'],
+                'roomType': booking.get('room', {}).get('room_type', 'Unknown'),
+                'checkInDate': booking['check_in_date'],
+                'checkOutDate': booking['check_out_date'],
+                'guestName': f"{booking.get('guest', {}).get('first_name', '')} "
+                             f"{booking.get('guest', {}).get('last_name', '')}".strip(),
+                'status': 'Checked In' if booking['checkin_status'] else 'Pending'
+            }
+            formatted_bookings.append(formatted)
+
+        return jsonify(formatted_bookings), 200
+
+    except Exception as e:
+        print(f"Error retrieving guest bookings: {str(e)}")
+        return jsonify({'success': False, 'message': 'Failed to retrieve bookings'}), 500
+
+#Cancel Booking
+@app.route('/cancel_booking/<int:booking_id>', methods=['DELETE'])
+def cancel_booking(booking_id):
+    try:
+        booking_response = supabase.table('room_booking') \
+            .select('*') \
+            .eq('reservation_id', booking_id) \
+            .execute()
+        
+        if not booking_response.data:
+            return jsonify({'success': False, 'message': 'Booking not found'}), 404
+
+        delete_response = supabase.table('room_booking') \
+            .delete() \
+            .eq('reservation_id', booking_id) \
+            .execute()
+
+        if delete_response.data:
+            supabase.table('room') \
+                .update({'status': 'Available'}) \
+                .eq('room_id', booking_response.data[0]['room_id']) \
+                .execute()
+            
+            return jsonify({'success': True, 'message': 'Booking canceled'}), 200
+        
+        return jsonify({'success': False, 'message': 'Failed to cancel booking'}), 400
+
+    except Exception as e:
+        print(f"Error canceling booking: {str(e)}")
+        return jsonify({'success': False, 'message': 'Server error'}), 500
+
 """"
 STAFF FUNCTIONS
 """
@@ -417,6 +477,11 @@ def get_guest_bookings():
     except Exception as e:
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'suess': False, 'message': 'failed to retrieve room bookings'})
+
+#check guest out 
+@app.route('/check_out', methods=['POST'])
+def check_out(reservation_id):
+    pass
     
 """"
 ADMIN FUNCTION
