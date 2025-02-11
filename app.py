@@ -7,7 +7,7 @@ import hashlib
 import os
 import secrets
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -263,8 +263,7 @@ def book_room():
     try:
         # parse input data
         data = request.json
-        print("Data recieved:", data)
-
+        
         #Checking for required fields
         required_fields = ["user_id", "room_type", "check_in_date", "check_out_date"]
         for field in required_fields:
@@ -274,8 +273,8 @@ def book_room():
         #Detail extraction
         user_id = data.get("user_id")
         room_type = data.get("room_type")
-        check_in_date = data.get("check_in_date")
-        check_out_date = data.get("check_out_date")
+        check_in_date = datetime.fromisoformat(data.get("check_in_date")).replace(tzinfo=timezone.utc)
+        check_out_date = datetime.fromisoformat(data.get("check_out_date")).replace(tzinfo=timezone.utc)
 
         # Amenities
         extra_towels = data.get("ExtraTowels", False)
@@ -285,36 +284,43 @@ def book_room():
         late_checkout = data.get("LateCheckout", False)
         
         # Check for available rooms of the specified type
-        response = supabase.table("room").select("*").eq("room_type", room_type).eq("status", "Available").execute()
-        available_rooms = response.data
-        if not available_rooms:
+        response = supabase.table("room").select("*").eq("room_type", room_type).execute()
+        all_room = response.data
+        if not all_room:
             return jsonify({"success": False, "message": "No available rooms of the selected type"}), 400
 
-        # Check for date clashes
         suitable_room = None
-        for room in available_rooms:
-            room_id = room["room_id"]
-            booking_conflicts = supabase.table("room_booking").select("*").eq("room_id", room_id).execute()
-            conflicts = booking_conflicts.data
-
-            # Check if the room is free for the selected dates
-            is_available = all(
-                (check_out_date <= booking["check_in_date"] or check_in_date >= booking["check_out_date"])
-                for booking in conflicts
-            )
-            if is_available:
+        for room in all_room:
+            # Check existing bookings for this room
+            bookings_response = supabase.table("room_booking") \
+                .select("check_in_date, check_out_date") \
+                .eq("room_id", room["room_id"]) \
+                .execute()
+            
+            # Check for overlapping bookings
+            conflict = False
+            for booking in bookings_response.data:
+                existing_start = datetime.fromisoformat(booking["check_in_date"]).astimezone(timezone.utc)
+                existing_end = datetime.fromisoformat(booking["check_out_date"]).astimezone(timezone.utc)
+                
+                # Check for date overlap
+                if (check_in_date < existing_end) and (check_out_date > existing_start):
+                    conflict = True
+                    break
+            
+            if not conflict:
                 suitable_room = room
                 break
 
         if not suitable_room:
-            return jsonify({"success": False, "message": "No rooms available for the selected dates"}), 400
+            return jsonify({"success": False, "message": "No available rooms for selected dates"}), 400
 
         # Book the room
         booking_data = {
             "user_id": user_id,
             "room_id": suitable_room["room_id"],
-            "check_in_date": check_in_date,
-            "check_out_date": check_out_date,
+            "check_in_date": check_in_date.isoformat(),
+            "check_out_date": check_out_date.isoformat(),
             "extra_towels": extra_towels,
             "room_service": room_service,
             "spa_access": spa_access,
@@ -395,6 +401,123 @@ def cancel_booking(booking_id):
         print(f"Error canceling booking: {str(e)}")
         return jsonify({'success': False, 'message': 'Server error'}), 500
 
+#Edit account details (Not password)
+@app.route("/update_user", methods=["POST"])
+def update_user():
+    try:
+        # Get JSON data
+        data = request.json
+
+        # Extract user ID and details
+        user_id = data.get("user_id")
+        first_name = data.get("first_name")
+        last_name = data.get("last_name")
+        mobile_number = data.get("mobile_number")
+        email = data.get("email")
+
+        # Check for required fields
+        if not user_id or not first_name or not last_name or not mobile_number or not email:
+            return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+        # Update the guest details
+        response = supabase.table("guest").update({
+            "first_name": first_name,
+            "last_name": last_name,
+            "mobile_number": mobile_number,
+            "email": email
+        }).eq("user_id", user_id).execute()
+
+        if 'error' in response:
+            print("Supabase error:", response['error'])
+            return jsonify({"success": False, "message": "Error updating account details"}), 500
+
+        return jsonify({"success": True, "message": "Account details updated successfully"}), 200
+
+    except Exception as e:
+        print("Error in edit_account_details:", e)
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
+@app.route("/edit_booking/<int:reservation_id>", methods=["PUT"])  # Changed to PUT and added URL parameter
+def edit_booking(reservation_id):
+    try:
+        data = request.json
+
+        # Validate input
+        required_fields = ["check_in_date", "check_out_date"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"success": False, "message": f"Missing {field}"}), 400
+
+        # Convert dates to UTC
+        try:
+            new_check_in = datetime.fromisoformat(data["check_in_date"]).astimezone(timezone.utc)
+            new_check_out = datetime.fromisoformat(data["check_out_date"]).astimezone(timezone.utc)
+        except ValueError:
+            return jsonify({"success": False, "message": "Invalid date format"}), 400
+
+        # Validate date order
+        if new_check_in >= new_check_out:
+            return jsonify({"success": False, "message": "Check-out must be after check-in"}), 400
+
+        # Get current booking
+        booking_response = supabase.table("room_booking") \
+            .select("room_id,check_in_date,check_out_date") \
+            .eq("reservation_id", reservation_id) \
+            .execute()
+        
+        if not booking_response.data:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+
+        current_booking = booking_response.data[0]
+        room_id = current_booking["room_id"]
+
+        # Check for overlapping bookings
+        conflicts_response = supabase.table("room_booking") \
+            .select("reservation_id,check_in_date,check_out_date") \
+            .eq("room_id", room_id) \
+            .neq("reservation_id", reservation_id) \
+            .execute()
+
+        conflict = False
+        for booking in conflicts_response.data:
+            existing_start = datetime.fromisoformat(booking["check_in_date"]).astimezone(timezone.utc)
+            existing_end = datetime.fromisoformat(booking["check_out_date"]).astimezone(timezone.utc)
+            
+            if (new_check_in < existing_end) and (new_check_out > existing_start):
+                conflict = True
+                break
+
+        if conflict:
+            return jsonify({
+                "success": False,
+                "message": "Dates conflict with existing booking"
+            }), 400
+
+        # Prepare update data
+        update_data = {
+            "check_in_date": new_check_in.isoformat(),
+            "check_out_date": new_check_out.isoformat()
+        }
+
+        # Update booking
+        update_response = supabase.table("room_booking") \
+            .update(update_data) \
+            .eq("reservation_id", reservation_id) \
+            .execute()
+
+        if not update_response.data:
+            return jsonify({"success": False, "message": "Update failed"}), 500
+
+        return jsonify({
+            "success": True,
+            "message": "Booking updated successfully",
+            "new_dates": update_data
+        }), 200
+
+    except Exception as e:
+        print(f"Edit booking error: {str(e)}")
+        return jsonify({"success": False, "message": "Server error"}), 500
+    
 """"
 STAFF FUNCTIONS
 """
