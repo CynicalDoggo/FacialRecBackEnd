@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
-from supabase import create_client, Client
+from supabase import create_client
+from supabase.lib.client_options import ClientOptions
 from flask_cors import CORS
 from dotenv import load_dotenv
 import hashlib
@@ -8,12 +9,21 @@ import secrets
 import json
 from datetime import datetime
 
-load_dotenv(dotenv_path="C:/Users/Bryant Tan/OneDrive/Desktop/ZeroRecBackEnd/BackEndFlaskApp/FacialRecBackEnd/.env")
+load_dotenv()
 
 # Supabase connection setup
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
-supabase = create_client(url, key)
+supabase = create_client(
+    url,
+    key,
+    options=ClientOptions(
+        auto_refresh_token=False,
+        persist_session=False,
+    )
+)
+
+admin = supabase.auth.admin
 
 #secret key generator
 secret_key = secrets.token_hex(32)
@@ -27,6 +37,9 @@ app.secret_key = secret_key
 #Hash Function
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+#Time Stamp
+timestamp = datetime.now().isoformat()
 
 """"
 GUEST FUNCTIONS
@@ -138,7 +151,6 @@ def change_password():
         #Get data from request
         data = request.get_json()
         #Checking for data recieved
-        print("Received Data: ", data)
         user_id = data.get("user_id")
 
         if not user_id:
@@ -159,6 +171,23 @@ def change_password():
         if "error" in auth_user:
             return jsonify({"success": False, "message": "Invalid current password"}), 401
 
+        try:
+            #Get guest name for loggin purposes:
+            response = supabase.table("guest").select("email").eq("user_id", user_id).execute()
+            
+            email = response.data[0]["email"]
+        
+            #Log activity into supabase
+            supabase.table("logs").insert({
+                "id": user_id,
+                "email": email,
+                "activity": f"{email} changed their password",
+                "logged_time": timestamp
+            }).execute()
+        except Exception as e:
+            print(e)
+            return jsonify({"success": False, "message": "Error logging password change"}), 500
+            
         # Update the user's password in Supabase Auth
         update_response = supabase.auth.update_user({"password": new_pw})
 
@@ -442,7 +471,6 @@ def get_blacklisted_guests():
         print("Exception:", e)
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-
 #Fetch all bookings
 @app.route('/get_guest_bookings', methods = ['GET'])
 def get_guest_bookings():
@@ -512,6 +540,102 @@ def check_out(booking_id):
 """"
 ADMIN FUNCTION
 """
+@app.route('/get_all_staff', methods=['GET'])
+def get_all_staff():
+    try:
+        response =supabase.table("profiles").select("id").eq("role", "staff").execute()
+        staffId = response.data
 
+        staff = []
+        
+        for staff_id in staffId:
+            staff_response = supabase.table("employee").select("*").eq("id", staff_id["id"]).execute()
+            
+            if staff_response.data:
+                staff.append(staff_response.data[0])
+            
+        return jsonify(staff), 200
+        
+    except Exception as e:
+        print(f"Error retrieving staff: {str(e)}")
+        return jsonify({'success': False, 'message': 'Failed to retrieve staff'}), 500
+
+@app.route("/add_staff", methods=["POST"])
+def add_staff():
+    try:
+        # Get JSON data from frontend
+        data = request.get_json()
+        email = data.get("email")
+        password = data.get("password")
+
+        if not email or not password:
+            return jsonify({"success": False, "message": "Email and password are required"}), 400
+
+        try:
+            # Create a new user in Supabase Auth
+            auth_response = supabase.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True  # Auto-confirm email
+            })
+            
+            # Check for valid response
+            if not hasattr(auth_response, 'user') or not auth_response.user.id:
+                return jsonify({"success": False, "message": "Failed to create auth user"}), 500
+                
+            user_id = auth_response.user.id
+        except Exception as e:
+            print(f"Error creating user in Supabase Auth: {str(e)}")
+
+        # Insert staff details into profiles table
+        profiles_response = supabase.table("profiles").insert({
+            "id": user_id,
+            "role": "staff"
+        }).execute()
+        
+        employee_response = supabase.table("employee").insert({
+            "id": user_id,
+            "email": email,
+            "full_name": "AnonStaff",
+            "password_hash": hash_password(password),
+            "active_status": True
+        }).execute()
+        
+        return jsonify({"success": True, "message": "Staff added successfully"}), 201
+
+    except Exception as e:
+        print(f"Error adding staff: {str(e)}")
+        return jsonify({"success": False, "message": "Error adding staff"}), 500
+
+@app.route("/delete_staff/<string:staff_id>", methods=["DELETE"])
+def delete_staff(staff_id):
+    try:
+        # Delete staff from profiles table
+        profiles_response = supabase.table("profiles").delete().eq("id", staff_id).execute()
+        
+        # Delete staff from employee table
+        employee_response = supabase.table("employee").delete().eq("id", staff_id).execute()
+        
+        # Delete staff from Supabase Auth
+        auth_response = supabase.auth.admin.delete_user(staff_id)
+        
+        return jsonify({"success": True, "message": "Staff deleted successfully"}), 200
+
+    except Exception as e:
+        print(f"Error deleting staff: {str(e)}")
+        return jsonify({"success": False, "message": "Error deleting staff"}), 500
+
+@app.route("/retrieve_logs", methods=["GET"])
+def retrieve_logs():
+    try:
+        response = supabase.table("logs").select("*").execute()
+        logs = response.data
+
+        return jsonify(logs), 200
+
+    except Exception as e:
+        print(f"Error retrieving logs: {str(e)}")
+        return jsonify({"success": False, "message": "Error retrieving logs"}), 500
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
