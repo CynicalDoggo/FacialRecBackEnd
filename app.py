@@ -794,7 +794,7 @@ def set_room_occupied(reservationId):
 @app.route('/get_guest_logs', methods=['GET'])
 def get_guest_logs():
     try:
-        response = supabase.table("ciCoLogs").select("*").execute()
+        response = supabase.table("cicologs").select("*").execute()
         logs = response.data
 
         return jsonify(logs), 200
