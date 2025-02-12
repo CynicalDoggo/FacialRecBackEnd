@@ -328,12 +328,19 @@ def book_room():
         print("Error in book_room:", str(e))
         return jsonify({"success": False, "message": "Internal server error"}), 500
 
-#Get booking list for display
+
+# Get booking list for display (Filtered by user_id)
 @app.route('/get_guest_bookingsGUEST', methods=['GET'])
 def get_guest_bookingsGUEST():
     try:
+        user_id = request.args.get('user_id')  # Get user_id from query params
+        if not user_id:
+            return jsonify({'success': False, 'message': 'User ID is required'}), 400
+
+        print("User ID:", user_id)
         response = supabase.table('room_booking') \
             .select('*, guest(first_name, last_name), room(room_type)') \
+            .eq('user_id', user_id) \
             .execute()
 
         bookings = response.data
@@ -356,6 +363,7 @@ def get_guest_bookingsGUEST():
     except Exception as e:
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'success': False, 'message': 'Failed to retrieve bookings'}), 500
+
 
 #Cancel Booking
 @app.route('/cancel_booking/<int:booking_id>', methods=['DELETE'])
