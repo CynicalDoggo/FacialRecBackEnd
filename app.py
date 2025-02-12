@@ -189,7 +189,7 @@ def change_password():
             return jsonify({"success": False, "message": "Error logging password change"}), 500
             
         # Update the user's password in Supabase Auth
-        update_response = supabase.auth.update_user({"password": new_pw})
+        update_response = supabase.auth.admin_update_user_by_id(user_id, {"password": new_pw})
 
         if "error" in update_response:
             return jsonify({"success": False, "message": "Failed to update password in Supabase Auth"}), 500
@@ -330,9 +330,6 @@ def book_room():
         booking_response = supabase.table("room_booking").insert(booking_data).execute()
 
         if booking_response.data:
-            # Update room status to "Occupied"
-            supabase.table("room").update({"status": "Occupied"}).eq("room_id", suitable_room["room_id"]).execute()
-
             return jsonify({"success": True, "message": "Room booked successfully!", "room_number": suitable_room["room_number"]}), 200
         else:
             return jsonify({"success": False, "message": "Error booking room."}), 400
@@ -437,7 +434,8 @@ def update_user():
         print("Error in edit_account_details:", e)
         return jsonify({"success": False, "message": "Internal server error"}), 500
 
-@app.route("/edit_booking/<int:reservation_id>", methods=["PUT"])  # Changed to PUT and added URL parameter
+#edit booking
+@app.route("/edit_booking/<int:reservation_id>", methods=["PUT"]) 
 def edit_booking(reservation_id):
     try:
         data = request.json
@@ -517,7 +515,63 @@ def edit_booking(reservation_id):
     except Exception as e:
         print(f"Edit booking error: {str(e)}")
         return jsonify({"success": False, "message": "Server error"}), 500
-    
+
+#log login activity
+@app.route("/logIn_activity", methods=["POST"])
+def logIn_activity():
+    try:
+        data = request.get_json()
+        
+        user_id = data.get("user_id")
+
+        email = supabase.table("guest").select("email").eq("user_id", user_id).execute().data[0]["email"]
+        print(email)
+
+        response = supabase.table("logs").insert({
+            "id": user_id,         # This column references the guest's user_id
+            "activity": f"{email} logged in",
+            "email": email,
+            "logged_time": timestamp
+        }).execute()
+
+        if "error" in response:
+            print("Supabase error:", response["error"])
+            return jsonify({"success": False, "message": "Error logging activity"}), 500
+
+        return jsonify({"success": True, "message": "Activity logged successfully"}), 200
+
+    except Exception as e:
+        print("Error in log_activity:", str(e))
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
+#Log out activity
+@app.route("/logOut_activity", methods=["POST"])
+def logOut_activity():
+    try:
+        data = request.get_json()
+        print(data)
+        user_id = data.get("user_id")
+
+        email = supabase.table("guest").select("email").eq("user_id", user_id).execute().data[0]["email"]
+        print(email)
+
+        response = supabase.table("logs").insert({
+            "id": user_id,         
+            "activity": f"{email} logged out",
+            "email": email,
+            "logged_time": timestamp
+        }).execute()
+
+        if "error" in response:
+            print("Supabase error:", response["error"])
+            return jsonify({"success": False, "message": "Error logging activity"}), 500
+
+        return jsonify({"success": True, "message": "Activity logged successfully"}), 200
+
+    except Exception as e:
+        print("Error in log_activity:", str(e))
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
 """"
 STAFF FUNCTIONS
 """
@@ -629,28 +683,35 @@ def get_guest_bookings():
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'suess': False, 'message': 'failed to retrieve room bookings'})
 
-# checks guess out
-@app.route('/check_out/<int:booking_id>', methods=['DELETE'])  # Changed to DELETE method
-def check_out(booking_id):
+# checks guess out and logs activity
+@app.route('/check_out/<int:reservationId>', methods=['DELETE'])  # Changed to DELETE method
+def check_out(reservationId):
     try:
-        booking_response = supabase.table('room_booking') \
-            .select('room_id') \
-            .eq('reservation_id', booking_id) \
-            .execute()
-        
-        if not booking_response.data:
+        rb_response = supabase.table('room_booking').select('user_id', 'room_id').eq('reservation_id', reservationId).execute()
+ 
+        if not rb_response.data:
             return jsonify({'success': False, 'message': 'Booking not found'}), 404
+        user_id = rb_response.data[0]['user_id']
+        room_id = rb_response.data[0]['room_id']
+        g_response = supabase.table('guest').select('first_name, last_name').eq('user_id', user_id).execute()
+        if not g_response.data:
+            return jsonify({'success': False, 'message': 'Guest not found'}), 404
+        
+        guest_name = f"{g_response.data[0]['first_name']} {g_response.data[0]['last_name']}"
+        
+        try:
+            supabase.table('cicologs').insert({
+                    "full_name": guest_name,
+                    "activity": f"Checked out of room {room_id}",
+                }).execute()
+        except Exception as e:
+            print(f"Error logging check-out activity: {str(e)}")
+            return jsonify({'success': False, 'message': 'Failed to log check-out activity'}), 500
 
-        delete_response = supabase.table('room_booking') \
-            .delete() \
-            .eq('reservation_id', booking_id) \
-            .execute()
+        delete_response = supabase.table('room_booking').delete().eq('reservation_id', reservationId).execute()
 
         if delete_response.data:
-            supabase.table('room') \
-                .update({'status': 'Available'}) \
-                .eq('room_id', booking_response.data[0]['room_id']) \
-                .execute()
+            supabase.table('room').update({'status': 'Available'}).eq('room_id', room_id).execute()
             
             return jsonify({'success': True, 'message': 'Check-out successful'}), 200
             
@@ -659,7 +720,97 @@ def check_out(booking_id):
     except Exception as e:
         print(f"Check-out error: {str(e)}")
         return jsonify({'success': False, 'message': 'Server error'}), 500
-    
+
+#room status
+@app.route('/get-room-status', methods=['GET'])
+def get_room_status():
+    try:
+        room_response = supabase.table('room').select('*').execute()
+        rooms = room_response.data  
+        
+        for room in rooms:
+            # Set default values for guestName and checkOutDate
+            room["guestName"] = ""
+            room["checkOutDate"] = ""
+            
+            # Map room_id to id for frontend
+            room["id"] = room.get("room_id")
+            
+            # Query for an active booking for this room (assuming checkin_status is True when checked in)
+            booking_response = supabase.table("room_booking") \
+                .select("check_out_date, user_id") \
+                .eq("room_id", room["room_id"]) \
+                .eq("checkin_status", True) \
+                .execute()
+            
+            if booking_response.data and len(booking_response.data) > 0:
+                booking = booking_response.data[0]
+                # Retrieve the guest's first and last name from the guest table
+                guest_response = supabase.table("guest") \
+                    .select("first_name, last_name") \
+                    .eq("user_id", booking["user_id"]) \
+                    .single() \
+                    .execute()
+                if guest_response.data:
+                    first_name = guest_response.data.get("first_name", "")
+                    last_name = guest_response.data.get("last_name", "")
+                    room["guestName"] = f"{first_name} {last_name}".strip()
+                room["checkOutDate"] = booking.get("check_out_date", "")
+        
+        return jsonify(rooms), 200
+
+    except Exception as e:
+        print(f"Error retrieving room status: {str(e)}")
+        return jsonify({'success': False, 'message': 'Failed to retrieve room status'}), 500
+
+#Set room status to occupied and logs check in
+@app.route('/set-room-occupied/<int:reservationId>', methods=['PUT'])
+def set_room_occupied(reservationId):
+    try:
+        res_response = supabase.table("room_booking").select("room_id", "user_id").eq("reservation_id", reservationId).execute()
+        
+        if not res_response.data:
+            return jsonify({"success": False, "message": "Booking not found"}), 404
+        
+        room_id = res_response.data[0]["room_id"]
+        user_id = res_response.data[0]["user_id"]
+        
+        g_response = supabase.table("guest").select("first_name", "last_name").eq("user_id", user_id).execute()
+        
+        if not g_response.data:
+            return jsonify({"success": False, "message": "Guest not found"}), 404
+        
+        guest_name = f"{g_response.data[0]['first_name']} {g_response.data[0]['last_name']}"
+        
+        response = supabase.table("room").update({"status": "Occupied"}).eq("room_id", room_id).execute()
+        
+        if response.data:
+            supabase.table("ciCoLogs").insert({
+                "full_name": guest_name,
+                "activity": f"Checked out of room {room_id}",
+            }).execute()
+            
+            return jsonify({"success": True, "message": "Room status updated to 'Occupied'"}), 200
+        else:
+            return jsonify({"success": False, "message": "Failed to update room status"}), 400
+
+    except Exception as e:
+        print(f"Error setting room status to 'Occupied': {str(e)}")
+        return jsonify({"success": False, "message": "Failed to update room status"}), 500
+
+#get guest log
+@app.route('/get_guest_logs', methods=['GET'])
+def get_guest_logs():
+    try:
+        response = supabase.table("ciCoLogs").select("*").execute()
+        logs = response.data
+
+        return jsonify(logs), 200
+
+    except Exception as e:
+        print(f"Error retrieving guest logs: {str(e)}")
+        return jsonify({"success": False, "message": "Error retrieving logs"}), 500
+
 """"
 ADMIN FUNCTION
 """
@@ -759,6 +910,49 @@ def retrieve_logs():
     except Exception as e:
         print(f"Error retrieving logs: {str(e)}")
         return jsonify({"success": False, "message": "Error retrieving logs"}), 500
+
+@app.route("/edit_staff/<string:staff_id>", methods=["PUT"]) 
+def edit_staff(staff_id):
+    try:
+        data = request.json
+
+        # Validate input: require at least email
+        if not data.get("email"):
+            return jsonify({"success": False, "message": "Missing email"}), 400
+
+        email = data.get("email")
+        new_password = data.get("password")  # Optional; if provided, update password
+
+        # Prepare update data for Supabase Auth
+        update_data = {"email": email}
+        if new_password:
+            update_data["password"] = new_password
+
+        # Update the user's auth record (requires service_role key)
+        auth_response = supabase.auth.admin.update_user_by_id(staff_id, update_data)
+        if "error" in auth_response:
+            print("Auth update error:", auth_response["error"])
+            return jsonify({"success": False, "message": "Error updating authentication details"}), 500
+
+        # Prepare update data for the employee table.
+        employee_update_data = {"email": email}
+        if new_password:
+            # Optionally store a hashed version of the password
+            employee_update_data["password_hash"] = hash_password(new_password)
+
+        # Update the employee record (assumes the employee table has "id" as the primary key)
+        response = supabase.table("employee").update(employee_update_data).eq("id", staff_id).execute()
+
+        if "error" in response:
+            print("Supabase error:", response["error"])
+            return jsonify({"success": False, "message": "Error updating staff details in employee table"}), 500
+
+        return jsonify({"success": True, "message": "Staff details updated successfully"}), 200
+
+    except Exception as e:
+        print("Error in edit_staff:", e)
+        return jsonify({"success": False, "message": "Internal server error"}), 500
+
     
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
