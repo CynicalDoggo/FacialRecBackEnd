@@ -31,7 +31,6 @@ secret_key = secrets.token_hex(32)
 app = Flask(__name__)
 # Allow multiple origins
 CORS(app, resources={r"/*": {"origins": ["https://facialrecog-2b424.web.app", "http://localhost:5173"]}}, supports_credentials=True)
-CORS(app)
 app.secret_key = secret_key
 
 #Hash Function
@@ -781,13 +780,15 @@ def set_room_occupied(reservationId):
             return jsonify({"success": False, "message": "Guest not found"}), 404
         
         guest_name = f"{g_response.data[0]['first_name']} {g_response.data[0]['last_name']}"
+
+        print(f"{guest_name} {room_id} {user_id}")
         
         response = supabase.table("room").update({"status": "Occupied"}).eq("room_id", room_id).execute()
         
         if response.data:
-            supabase.table("ciCoLogs").insert({
+            supabase.table("cicologs").insert({
                 "full_name": guest_name,
-                "activity": f"Checked out of room {room_id}",
+                "activity": f"Checked into room {room_id}",
             }).execute()
             
             return jsonify({"success": True, "message": "Room status updated to 'Occupied'"}), 200
