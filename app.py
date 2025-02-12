@@ -188,7 +188,7 @@ def change_password():
             return jsonify({"success": False, "message": "Error logging password change"}), 500
             
         # Update the user's password in Supabase Auth
-        update_response = supabase.auth.admin_update_user_by_id(user_id, {"password": new_pw})
+        update_response = supabase.auth.admin.update_user_by_id(user_id, {"password": new_pw})
 
         if "error" in update_response:
             return jsonify({"success": False, "message": "Failed to update password in Supabase Auth"}), 500
@@ -846,12 +846,13 @@ def get_all_staff():
     try:
         response =supabase.table("profiles").select("id").eq("role", "staff").execute()
         staffId = response.data
-
+        print("Profiles query result:", staffId) 
+        
         staff = []
         
         for staff_id in staffId:
             staff_response = supabase.table("employee").select("*").eq("id", staff_id["id"]).execute()
-            
+            print("Employee query result for", staff_id["id"], ":", staff_response.data)  # Debug log
             if staff_response.data:
                 staff.append(staff_response.data[0])
             
