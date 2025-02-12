@@ -22,7 +22,6 @@ supabase = create_client(
         persist_session=False,
     )
 )
-
 admin = supabase.auth.admin
 
 #secret key generator
@@ -155,20 +154,18 @@ def change_password():
         if not user_id:
             return jsonify({"success": False, "message": "User ID is required"}), 400
 
-        current_pw = data.get("current_password")
         new_pw = data.get("new_password")
 
         # Validate input
-        if not user_id or not current_pw or not new_pw:
+        if not user_id or not new_pw:
             return jsonify({"success": False, "message": "Missing required fields"}), 400
-        
-        auth_user = supabase.auth.sign_in_with_password({
-            "email": data.get("email"),
-            "password": current_pw
-        })
 
-        if "error" in auth_user:
-            return jsonify({"success": False, "message": "Invalid current password"}), 401
+        try:
+            # Update the user's password in Supabase Auth
+            update_response = supabase.auth.admin.update_user_by_id(user_id, {"password": new_pw})
+        except Exception as e:
+            print("Error updating password in Supabase Auth:", e)
+            return jsonify({"success": False, "message": "Error updating password into supabase"}), 500
 
         try:
             #Get guest name for loggin purposes:
@@ -187,12 +184,6 @@ def change_password():
             print(e)
             return jsonify({"success": False, "message": "Error logging password change"}), 500
             
-        # Update the user's password in Supabase Auth
-        update_response = supabase.auth.admin.update_user_by_id(user_id, {"password": new_pw})
-
-        if "error" in update_response:
-            return jsonify({"success": False, "message": "Failed to update password in Supabase Auth"}), 500
-        
         #Hash new passwordfor storage
         new_pw_hashed = hash_password(new_pw)
 
