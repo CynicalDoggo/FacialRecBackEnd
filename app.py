@@ -812,6 +812,32 @@ def get_guest_logs():
         print(f"Error retrieving guest logs: {str(e)}")
         return jsonify({"success": False, "message": "Error retrieving logs"}), 500
 
+#fetch checkin and check out date for display
+@app.route('/get_checkin_checkout/<int:guest_id>', methods=['GET'])
+def get_checkin_checkout(guest_id):
+    try:
+        print(guest_id)
+        
+        booking_response = supabase.table("room_booking") \
+            .select("check_in_date, check_out_date") \
+            .eq("reservation_id", guest_id) \
+            .execute()
+        print(booking_response.data)
+
+        if not booking_response.data:
+            return jsonify({"success": False, "message": "No booking found"}), 404
+
+        booking = booking_response.data[0]
+        return jsonify({
+            "checkInDate": booking["check_in_date"],
+            "checkOutDate": booking["check_out_date"]
+        }), 200
+
+    except Exception as e:
+        print(f"Error fetching check-in/out dates: {str(e)}")
+        return jsonify({"success": False, "message": "Failed to fetch dates"}), 500
+
+
 """"
 ADMIN FUNCTION
 """
