@@ -125,6 +125,23 @@ def register():
         print("Error:", e)
         return jsonify({"success": False, "message": str(e)}), 400
 
+@app.route('/check_blacklist', methods=['GET'])
+def check_blacklist():
+    email = request.args.get('email')
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    response = (
+        supabase.table("blacklist")
+        .select("email")
+        .eq("email", email)
+        .execute()
+    )
+
+    is_blacklisted = len(response.data) > 0
+    return jsonify({"is_blacklisted": is_blacklisted})
+
 #Grab User Data for display function
 @app.route("/get_user_data", methods=["GET"])
 def get_user_data():
@@ -328,7 +345,6 @@ def book_room():
         print("Error in book_room:", str(e))
         return jsonify({"success": False, "message": "Internal server error"}), 500
 
-
 # Get booking list for display (Filtered by user_id)
 @app.route('/get_guest_bookingsGUEST', methods=['GET'])
 def get_guest_bookingsGUEST():
@@ -363,7 +379,6 @@ def get_guest_bookingsGUEST():
     except Exception as e:
         print(f"Error retrieving guest bookings: {str(e)}")
         return jsonify({'success': False, 'message': 'Failed to retrieve bookings'}), 500
-
 
 #Cancel Booking
 @app.route('/cancel_booking/<int:booking_id>', methods=['DELETE'])
